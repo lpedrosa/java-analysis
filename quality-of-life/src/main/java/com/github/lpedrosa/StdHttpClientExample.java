@@ -30,13 +30,17 @@ public final class StdHttpClientExample {
     private static void simpleHttpRequest(Executor executor) throws Exception {
         // there an HttpRequest class with a builder, which helps you build requests
         // here is a simple get example
-        var request = HttpRequest.newBuilder(URI.create("https://httpstat.us/200")).GET()
-                .header("Accepts", "text/plain").build();
+        var request = HttpRequest.newBuilder(URI.create("https://httpstat.us/200"))
+                                 .GET()
+                                 .header("Accepts", "text/plain")
+                                 .build();
 
         // you need an http client to run this request
         // let's create one with good defaults (check HttpClient#newHttpClient for more
         // details)
-        var client = HttpClient.newBuilder().executor(executor).build();
+        var client = HttpClient.newBuilder()
+                               .executor(executor)
+                               .build();
 
         // we need to provide a body handler, so the client knows how to handle the
         // response.
@@ -58,10 +62,11 @@ public final class StdHttpClientExample {
         System.out.println("status code: " + statusCode);
 
         System.out.println("headers:");
-        var entries = headers.map().entrySet();
+        var entries = headers.map()
+                             .entrySet();
         for (var entry : entries) {
             Function<List<String>, String> prettyPrintList = (s) -> s.stream()
-                    .collect(Collectors.joining(",", "[", "]"));
+                                                                     .collect(Collectors.joining(",", "[", "]"));
 
             var s = String.format("\t %s: %s", entry.getKey(), prettyPrintList.apply(entry.getValue()));
             System.out.println(s);

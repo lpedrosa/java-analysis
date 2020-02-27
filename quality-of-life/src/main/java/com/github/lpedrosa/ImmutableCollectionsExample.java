@@ -28,7 +28,8 @@ public final class ImmutableCollectionsExample {
         var alice = people.get(0);
         alice.setName("New Alice");
 
-        System.out.println("Alice has a new name: " + people.get(0).getName());
+        System.out.println("Alice has a new name: " + people.get(0)
+                                                            .getName());
 
         // another gotcha is adding elements of mixed types to a collection
         // if you use var, the compiler will infer it to the common super type

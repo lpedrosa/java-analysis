@@ -59,11 +59,12 @@ public final class OptionalExample {
         // For example, you might have a good default for a consuming method,
         // which incompatible with your supplier
         Consumer<InetSocketAddress> readFromSocket = sa -> System.out
-                .println("Reading from host: " + sa.getHostString());
+                                                                     .println("Reading from host: "
+                                                                             + sa.getHostString());
 
         // use hostname provided or use a default localhost socket instead
         var socketAddress = host.map(h -> InetSocketAddress.createUnresolved(h, 8080))
-                .orElse(InetSocketAddress.createUnresolved("localhost", 8080));
+                                .orElse(InetSocketAddress.createUnresolved("localhost", 8080));
 
         readFromSocket.accept(socketAddress);
 
@@ -71,13 +72,15 @@ public final class OptionalExample {
         // flatten it with
         // Option#flatMap
         // i.e. if you use Option#map, you'll end up with Option<Option<Config>>
-        var config = host.flatMap(OptionalExample::fetchConfigFor).orElse(Config.DEFAULT);
+        var config = host.flatMap(OptionalExample::fetchConfigFor)
+                         .orElse(Config.DEFAULT);
 
-        config.getHostname().ifPresentOrElse(h -> {
-            System.out.println("Using config for host: " + h);
-        }, () -> {
-            System.out.println("Using default config");
-        });
+        config.getHostname()
+              .ifPresentOrElse(h -> {
+                  System.out.println("Using config for host: " + h);
+              }, () -> {
+                  System.out.println("Using default config");
+              });
     }
 
     private static void optionalArgs() {
