@@ -3,12 +3,10 @@ package com.github.lpedrosa;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
+import java.net.http.HttpRequest.BodyPublishers;
+import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.util.List;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public final class StdHttpClientExample {
@@ -18,29 +16,21 @@ public final class StdHttpClientExample {
         // * timeouts
         // * configuring the underlying executor
         // * configuring SSL keystore, MTLS?
-
-        // had to provide custom executor for this to work with maven exec:java plugin
-        var executor = Executors.newCachedThreadPool();
-        simpleHttpRequest(executor);
-
-        executor.shutdown();
-        executor.awaitTermination(5, TimeUnit.SECONDS);
+        // we will need an http client to run some of these examples
+        // let's create one with good defaults (check HttpClient#newHttpClient for more
+        // details)
+        var client = HttpClient.newHttpClient();
+        simpleHttpRequest(client);
+        sendingSomeData(client);
     }
 
-    private static void simpleHttpRequest(Executor executor) throws Exception {
+    private static void simpleHttpRequest(HttpClient client) throws Exception {
         // there an HttpRequest class with a builder, which helps you build requests
         // here is a simple get example
         var request = HttpRequest.newBuilder(URI.create("https://httpstat.us/200"))
                                  .GET()
-                                 .header("Accepts", "text/plain")
+                                 .header("Accept", "text/plain; charset=utf-8")
                                  .build();
-
-        // you need an http client to run this request
-        // let's create one with good defaults (check HttpClient#newHttpClient for more
-        // details)
-        var client = HttpClient.newBuilder()
-                               .executor(executor)
-                               .build();
 
         // we need to provide a body handler, so the client knows how to handle the
         // response.
@@ -50,29 +40,50 @@ public final class StdHttpClientExample {
         // we can now make the request
         var response = client.send(request, bodyHandler);
 
-        // the response object contains all sorts of information about the response
-        var statusCode = response.statusCode();
-        var headers = response.headers();
+        printResponse("simpleHttpRequest", response);
+    }
 
-        // NOTE: the response body will have the same type as the return type of the
-        // BodyHandler#apply method
-        var body = response.body();
+    private static void sendingSomeData(HttpClient client) throws Exception {
+        // sending data requires a BodyPublisher
+        // NOTE: these body publisher factory methods, do not automatically
+        // set the 'Content-Type' header. You need to set it yourself
+        var requestBody = BodyPublishers.ofString("Hello");
 
-        System.out.println("== simpleHttpRequest -> response info ==");
-        System.out.println("status code: " + statusCode);
+        var request = HttpRequest.newBuilder(URI.create("https://httpstat.us/204"))
+                                 .POST(requestBody)
+                                 .header("Content-Type", "text/plain; charset=utf-8")
+                                 .build();
+
+        var response = client.send(request, BodyHandlers.ofString());
+
+        printResponse("sendingSomeData", response);
+    }
+
+    private static <T> void printResponse(String callerName, HttpResponse<T> response) {
+        System.out.println(String.format("== %s -> response info ==", callerName));
+        System.out.println("status code: " + response.statusCode());
 
         System.out.println("headers:");
-        var entries = headers.map()
-                             .entrySet();
-        for (var entry : entries) {
-            Function<List<String>, String> prettyPrintList = (s) -> s.stream()
-                                                                     .collect(Collectors.joining(",", "[", "]"));
-
-            var s = String.format("\t %s: %s", entry.getKey(), prettyPrintList.apply(entry.getValue()));
+        var headerEntries = response.headers()
+                                    .map()
+                                    .entrySet();
+        for (var entry : headerEntries) {
+            var s = String.format("\t %s: %s", entry.getKey(), prettyPrintList(entry.getValue()));
             System.out.println(s);
         }
 
-        System.out.println("body: " + body);
+        System.out.println("body: " + response.body());
+    }
+
+    private static String prettyPrintList(List<String> strings) {
+        if (strings.isEmpty()) {
+            return "Nothing";
+        } else if (strings.size() == 1) {
+            return strings.get(0);
+        } else {
+            return strings.stream()
+                          .collect(Collectors.joining(",", "[", "]"));
+        }
     }
 
     private StdHttpClientExample() {
