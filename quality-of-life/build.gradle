@@ -1,0 +1,24 @@
+plugins {
+    id 'java'
+    id "com.diffplug.gradle.spotless" version "3.27.1"
+}
+
+repositories {
+    mavenLocal()
+    maven {
+        url = 'http://repo.maven.apache.org/maven2'
+    }
+}
+
+sourceCompatibility = '1.13'
+
+spotless {
+  java {
+    eclipse().configFile("$projectDir/../eclipse-formatter.xml")
+  }
+}
+
+task runApp(type:JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    main = project.hasProperty("mainClass") ? project.getProperty("mainClass") : "package.MyDefaultMain"
+}

@@ -78,7 +78,6 @@ public final class OptionalExample {
         }, () -> {
             System.out.println("Using default config");
         });
-
     }
 
     private static void optionalArgs() {

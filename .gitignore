@@ -28,4 +28,8 @@ hs_err_pid*
 .settings/
 
 # Other
+.gradle
 .vscode/
+target/
+build/
+bin/
