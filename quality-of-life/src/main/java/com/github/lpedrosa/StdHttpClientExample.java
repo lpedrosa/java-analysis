@@ -15,9 +15,14 @@ import java.net.http.HttpResponse.BodySubscriber;
 import java.net.http.HttpResponse.BodySubscribers;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -31,6 +36,7 @@ public final class StdHttpClientExample {
         // * configuring the underlying executor
         // * configuring SSL keystore, MTLS?
         // we will need an http client to run some of these examples
+
         // let's create one with good defaults (check HttpClient#newHttpClient for more
         // details)
         var client = HttpClient.newHttpClient();
@@ -38,6 +44,9 @@ public final class StdHttpClientExample {
         sendingSomeData(client);
         decodingSomeJson(client);
         settingTimeouts(client);
+
+        // here we want to configure the http client a bit more
+        configuringExecutor();
     }
 
     private static void simpleHttpRequest(HttpClient client) throws Exception {
@@ -147,6 +156,54 @@ public final class StdHttpClientExample {
             clientWithTimeout.send(request, BodyHandlers.discarding());
         } catch (HttpConnectTimeoutException e) {
             System.err.println("Timed out while connecting: " + e.getMessage());
+        }
+    }
+
+    private static void configuringExecutor() throws Exception {
+        // the jdk httpclient uses an executor under the hood, to execute http requests
+        // so far we have been using the default one which is a cachedThreadPoolExecutor
+        // but you can pass your own executor
+        // this is useful if you want to instrument the executor, e.g. report the queue
+        // size, etc.
+
+        // let's restrict the thread pool to a single thread
+        // NOTE: this executor's queue is unbounded, and the thread factory produces
+        // non-daemon threads
+        // NOTE: the underlying httpclient implementation uses NIO, which means you
+        // will still get concurrent requests, their processing/handling is still
+        // single-threaded e.g. think nodejs
+        var myExecutor = Executors.newSingleThreadExecutor();
+
+        var client = HttpClient.newBuilder()
+                               .executor(myExecutor)
+                               .build();
+
+        var urls = List.of(
+                URI.create("https://google.com"),
+                URI.create("https://microsoft.com"),
+                URI.create("https://facebook.com"));
+
+        Stream<HttpRequest> requests = urls.stream()
+                                           .map(HttpRequest::newBuilder)
+                                           .map(b -> b.build());
+
+        try {
+            var start = Instant.now();
+            CompletableFuture.allOf(requests.map(request -> client.sendAsync(request, BodyHandlers.discarding()))
+                                            .map(futureResponse -> futureResponse.thenRun(
+                                                    () -> System.out.println("Completed response")))
+                                            .toArray(CompletableFuture<?>[]::new))
+                             .join();
+            var end = Instant.now();
+
+            System.out.println("Took " + Duration.between(start, end)
+                                                 .toMillis()
+                    + " to complete the request");
+        } finally {
+            // the executors threads are not daemon by default, so we need to shut it down
+            // properly
+            myExecutor.shutdown();
+            myExecutor.awaitTermination(1, TimeUnit.SECONDS);
         }
     }
 
