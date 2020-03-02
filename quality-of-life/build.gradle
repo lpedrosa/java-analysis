@@ -6,11 +6,15 @@ plugins {
 repositories {
     mavenLocal()
     maven {
-        url = 'http://repo.maven.apache.org/maven2'
+        url = 'https://repo.maven.apache.org/maven2'
     }
 }
 
 sourceCompatibility = '1.13'
+
+dependencies {
+  implementation(group:'com.fasterxml.jackson.core', name:'jackson-databind', version: '2.10.2')
+}
 
 spotless {
   java {
