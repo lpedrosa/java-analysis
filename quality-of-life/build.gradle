@@ -22,7 +22,7 @@ spotless {
   }
 }
 
-task runApp(type:JavaExec) {
+task runExample(type:JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
-    main = project.hasProperty("mainClass") ? project.getProperty("mainClass") : "package.MyDefaultMain"
+    main = project.hasProperty("mainClass") ? project.getProperty("mainClass") : "com.github.lpedrosa.VarExample"
 }
