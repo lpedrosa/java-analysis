@@ -14,6 +14,10 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.net.http.HttpResponse.BodySubscriber;
 import java.net.http.HttpResponse.BodySubscribers;
 import java.net.http.HttpTimeoutException;
+import java.security.KeyStore;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -24,19 +28,17 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public final class StdHttpClientExample {
     public static void main(String[] args) throws Exception {
-        // Things to test:
-        // * simple request API, sending entities, decoding entities, etc.
-        // * timeouts
-        // * configuring the underlying executor
-        // * configuring SSL keystore, MTLS?
-        // we will need an http client to run some of these examples
-
         // let's create one with good defaults (check HttpClient#newHttpClient for more
         // details)
         var client = HttpClient.newHttpClient();
@@ -47,6 +49,9 @@ public final class StdHttpClientExample {
 
         // here we want to configure the http client a bit more
         configuringExecutor();
+
+        // here we configure the different SSL options
+        configuringSslOptions();
     }
 
     private static void simpleHttpRequest(HttpClient client) throws Exception {
@@ -207,6 +212,70 @@ public final class StdHttpClientExample {
         }
     }
 
+    private static void configuringSslOptions() throws Exception {
+        // you can create a client that ignores cert validation i.e. similar to "curl
+        // -k" by giving it a trust manager that accepts everything.
+        // The whole SSL and certificate machinery can get very involved and I should
+        // probably write a blog post about it.
+
+        // the SSLContext uses a TrustManager to verify server certificates
+        // here we are creating one that accepts everything
+        var trustManagers = new TrustManager[] { AllowAllTrustManager.getInstance() };
+
+        // we initialize the context with our TrustManager
+        var sslContext = SSLContext.getInstance("TLS");
+
+        sslContext.init(null, trustManagers, null);
+
+        // we can now build the http client
+        var client = HttpClient.newBuilder()
+                               .sslContext(sslContext)
+                               .build();
+
+        // this host uses a self signed cert that we don't normally trust
+        var request = HttpRequest.newBuilder(URI.create("https://self-signed.badssl.com/"))
+                                 .GET()
+                                 .build();
+
+        var response = client.send(request, BodyHandlers.discarding());
+
+        printResponse("configuringSslOptions - allow all", response);
+
+        // if we want to add a particular certificate to the chain then we just need to
+        // load it into the client:
+        // * create a keystore (or use an existing one)
+        // * load up the certs you want
+        // * initialize a trust manager factory with the previous keystore
+        // * initialize the ssl context with the right trust managers
+        // fun right?
+        var ks = KeyStore.getInstance(KeyStore.getDefaultType());
+        try (var is = StdHttpClientExample.class.getResourceAsStream("/badsslcom-self-signed.crt")) {
+            ks.load(null, null);
+            // load public cert into the key store
+            var cert = CertificateFactory.getInstance("X509")
+                                         .generateCertificate(is);
+            // here the alias name doesn't really matter, unless you where exporting this
+            // keystore somewhere
+            ks.setCertificateEntry("1", cert);
+        }
+
+        var tmf = TrustManagerFactory.getInstance("PKIX");
+        tmf.init(ks);
+
+        var sslContextWithCerts = SSLContext.getInstance("TLS");
+
+        sslContextWithCerts.init(null, tmf.getTrustManagers(), null);
+
+        var clientWithCerts = HttpClient.newBuilder()
+                                        .sslContext(sslContextWithCerts)
+                                        .build();
+
+        // using the request above
+        response = clientWithCerts.send(request, BodyHandlers.discarding());
+
+        printResponse("configuringSslOptions - with loaded cert", response);
+    }
+
     private static <T> void printResponse(String callerName, HttpResponse<T> response) {
         System.out.println(String.format("== %s -> response info ==", callerName));
         System.out.println("status code: " + response.statusCode());
@@ -272,6 +341,33 @@ public final class StdHttpClientExample {
                     }
                 });
         return downstream;
+    }
+
+    private static final class AllowAllTrustManager implements X509TrustManager {
+
+        private static final AllowAllTrustManager INSTANCE = new AllowAllTrustManager();
+
+        public static final AllowAllTrustManager getInstance() {
+            return INSTANCE;
+        }
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+            // accept everything, yay!
+            System.err.println("WARNING: Accepting client with cert" + chain[0].getSubjectDN());
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+            // accept everything, yay!
+            System.err.println("WARNING: Accepting server with cert" + chain[0].getSubjectDN());
+        }
+
+        @Override
+        public X509Certificate[] getAcceptedIssuers() {
+            return new X509Certificate[0];
+        }
+
     }
 
     private StdHttpClientExample() {
